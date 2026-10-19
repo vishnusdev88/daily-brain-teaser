@@ -2,16 +2,25 @@ name: Daily brain teaser
 
 on:
   schedule:
-    - cron: "30 3 * * *"   # 03:30 UTC = 09:00 IST. GitHub's clock is UTC; runs can start a few minutes late.
-  workflow_dispatch:        # the "Run workflow" button
+    - cron: "30 3 * * *"   # 03:30 UTC = 09:00 IST
+  workflow_dispatch:
     inputs:
       dry_run:
         description: "Dry run (make the video, post nothing)"
         type: boolean
         default: false
+      platforms:
+        description: "Only these platforms: ig, fb, yt (comma separated). Empty = all that are set up"
+        type: string
+        default: ""
+      yt_privacy:
+        description: "YouTube privacy"
+        type: choice
+        options: [public, unlisted, private]
+        default: public
 
 permissions:
-  contents: write           # lets the job save state/<date>.json so a re-run never double-posts
+  contents: write
 
 concurrency:
   group: daily-brain-teaser
@@ -43,7 +52,15 @@ jobs:
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
-        run: python publish_daily.py --no-comment --state-dir state ${{ inputs.dry_run && '--dry-run' || '' }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          PLATFORMS: ${{ inputs.platforms }}
+          YT_PRIVACY: ${{ inputs.yt_privacy }}
+        run: |
+          ARGS="--no-comment --state-dir state"
+          if [ "$DRY_RUN" = "true" ]; then ARGS="$ARGS --dry-run"; fi
+          if [ -n "$PLATFORMS" ]; then ARGS="$ARGS --platforms $PLATFORMS"; fi
+          if [ -n "$YT_PRIVACY" ]; then ARGS="$ARGS --yt-privacy $YT_PRIVACY"; fi
+          python publish_daily.py $ARGS
 
       - name: Save what was posted
         if: always()
