@@ -1,0 +1,54 @@
+name: Daily brain teaser
+
+on:
+  schedule:
+    - cron: "30 3 * * *"   # 03:30 UTC = 09:00 IST. GitHub's clock is UTC; runs can start a few minutes late.
+  workflow_dispatch:        # the "Run workflow" button
+    inputs:
+      dry_run:
+        description: "Dry run (make the video, post nothing)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write           # lets the job save state/<date>.json so a re-run never double-posts
+
+concurrency:
+  group: daily-brain-teaser
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install ffmpeg and Python packages
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          pip install -r requirements.txt
+
+      - name: Make and publish today's video
+        env:
+          META_PAGE_ID: ${{ secrets.META_PAGE_ID }}
+          META_PAGE_TOKEN: ${{ secrets.META_PAGE_TOKEN }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+        run: python publish_daily.py --no-comment --state-dir state ${{ inputs.dry_run && '--dry-run' || '' }}
+
+      - name: Save what was posted
+        if: always()
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add state
+          git diff --cached --quiet || (git commit -m "Record today's posts" && git push)
